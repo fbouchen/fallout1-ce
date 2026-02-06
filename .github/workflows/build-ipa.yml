@@ -17,22 +17,21 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install dependencies (CMake 3)
+      - name: Install dependencies
         run: |
-          brew uninstall -f cmake || true
-          brew install botantony/cmake3/cmake3
-          echo "$(brew --prefix cmake3)/bin" >> $GITHUB_PATH
-          cmake3 --version
+          brew install cmake
+          cmake --version
 
-      - name: Configure CMake for iOS
+      - name: Configure CMake for iOS (CMake 4 compatible)
         run: |
-          cmake3 -B build \
+          cmake -B build \
             -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
-            -DCMAKE_OSX_ARCHITECTURES=arm64
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-      - name: Build with xcodebuild
+      - name: Build with xcodebuild (no signing)
         run: |
           xcodebuild -project build/fallout-ce.xcodeproj \
             -scheme fallout-ce \
@@ -47,12 +46,25 @@ jobs:
 
       - name: Create IPA
         run: |
+          # Find the .app bundle
           APP_PATH=$(find build/DerivedData -name "*.app" -type d | head -1)
           echo "Found app at: $APP_PATH"
 
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: .app not found in DerivedData"
+            find build/DerivedData -maxdepth 6 -type d -name "*.app" || true
+            exit 1
+          fi
+
+          # Create Payload directory and copy app
+          rm -rf Payload fallout-ce.ipa
           mkdir -p Payload
-          cp -r "$APP_PATH" Payload/
-          zip -r fallout-ce.ipa Payload
+          cp -R "$APP_PATH" Payload/
+
+          # Create IPA
+          /usr/bin/zip -r fallout-ce.ipa Payload
+
+          # Cleanup
           rm -rf Payload
 
       - name: Upload IPA artifact
