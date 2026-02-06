@@ -1,0 +1,66 @@
+name: Build iOS IPA
+
+on:
+    push:
+        branches: [feature/ipad-mouse-support]
+    pull_request:
+        branches: [feature/ipad-mouse-support]
+    workflow_dispatch: # Allows manual trigger
+
+jobs:
+    build-ios:
+        runs-on: macos-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  submodules: recursive
+
+            - name: Install dependencies
+              run: |
+                  brew install cmake
+
+            - name: Configure CMake for iOS
+              run: |
+                  cmake -B build \
+                    -G Xcode \
+                    -DCMAKE_SYSTEM_NAME=iOS \
+                    -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
+                    -DCMAKE_OSX_ARCHITECTURES=arm64
+
+            - name: Build with xcodebuild
+              run: |
+                  xcodebuild -project build/fallout-ce.xcodeproj \
+                    -scheme fallout-ce \
+                    -configuration Release \
+                    -sdk iphoneos \
+                    -destination "generic/platform=iOS" \
+                    CODE_SIGNING_ALLOWED=NO \
+                    CODE_SIGNING_REQUIRED=NO \
+                    CODE_SIGN_IDENTITY="" \
+                    -derivedDataPath build/DerivedData \
+                    build
+
+            - name: Create IPA
+              run: |
+                  # Find the .app bundle
+                  APP_PATH=$(find build/DerivedData -name "*.app" -type d | head -1)
+                  echo "Found app at: $APP_PATH"
+
+                  # Create Payload directory and copy app
+                  mkdir -p Payload
+                  cp -r "$APP_PATH" Payload/
+
+                  # Create IPA
+                  zip -r fallout-ce.ipa Payload
+
+                  # Cleanup
+                  rm -rf Payload
+
+            - name: Upload IPA artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: fallout-ce-ios
+                  path: fallout-ce.ipa
+                  retention-days: 30
