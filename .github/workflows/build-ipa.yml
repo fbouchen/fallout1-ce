@@ -46,25 +46,32 @@ jobs:
 
       - name: Create IPA
         run: |
-          # Find the .app bundle
-          APP_PATH=$(find build/DerivedData -name "*.app" -type d | head -1)
-          echo "Found app at: $APP_PATH"
+          set -euo pipefail
 
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: .app not found in DerivedData"
-            find build/DerivedData -maxdepth 6 -type d -name "*.app" || true
+          echo "Searching for .app bundle..."
+          # The app may end up in build/Release-iphoneos (CMake Xcode generator default)
+          # or in DerivedData/Build/Products/Release-iphoneos (xcodebuild default).
+          APP_PATH="$(
+            find build -type d -name "*.app" \
+              \( -path "*Release-iphoneos/*.app" -o -path "*DerivedData*/Build/Products/Release-iphoneos/*.app" \) \
+              | head -1
+          )"
+
+          echo "Found app at: ${APP_PATH:-<none>}"
+
+          if [ -z "${APP_PATH:-}" ]; then
+            echo "ERROR: .app not found. Dumping candidates:"
+            find build -type d -name "*.app" -print || true
+            echo "Dumping Build products directories:"
+            find build -maxdepth 6 -type d -name "Release-iphoneos" -print || true
             exit 1
           fi
 
-          # Create Payload directory and copy app
           rm -rf Payload fallout-ce.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
 
-          # Create IPA
           /usr/bin/zip -r fallout-ce.ipa Payload
-
-          # Cleanup
           rm -rf Payload
 
       - name: Upload IPA artifact
